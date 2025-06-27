@@ -47,7 +47,6 @@ app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password, customUrl } = req.body;
 
-    // Validációk
     if (!username || username.length < 4 || username.length > 20) {
       return res.status(400).json({ error: 'Username must be 4-20 characters long.' });
     }
@@ -61,17 +60,14 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Custom URL invalid.' });
     }
 
-    // Ellenőrzés
     const existingUser = await User.findOne({ $or: [{ username }, { email }, { customUrl }] });
     if (existingUser) {
       return res.status(400).json({ error: 'Username, email or custom URL already taken.' });
     }
 
-    // Jelszó hash-elés
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Új felhasználó mentése
     const newUser = new User({ username, email, passwordHash, customUrl });
     await newUser.save();
 
@@ -115,9 +111,37 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 🔁 Frontend fallback nem-API GET kérésekhez
-app.get('/api/:id', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'register.html'));
+// 🔍 Egyedi user adat lekérdezés API (pl. /api/user/thsnd)
+app.get('/api/user/:customUrl', async (req, res) => {
+  try {
+    const user = await User.findOne({ customUrl: req.params.customUrl });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({
+      username: user.username,
+      customUrl: user.customUrl,
+      email: user.email,
+    });
+  } catch (error) {
+    console.error('User fetch error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 📄 Dinamikus profiloldal (https://trigger.bio/[customUrl])
+app.get('/:customUrl', async (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  try {
+    const user = await User.findOne({ customUrl: req.params.customUrl });
+    if (!user) {
+      return res.status(404).sendFile(path.join(process.cwd(), 'public', '404.html'));
+    }
+    res.sendFile(path.join(process.cwd(), 'public', 'profile.html'));
+  } catch (error) {
+    console.error('Custom URL page error:', error);
+    res.status(500).send('Server error');
+  }
 });
 
 // 🚀 Szerver indítása
