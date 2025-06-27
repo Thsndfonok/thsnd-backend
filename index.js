@@ -20,7 +20,7 @@ app.use(bodyParser.json());
 // Statikus fájlok kiszolgálása a 'public' mappából
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// MongoDB kapcsolat
+// 🔌 MongoDB kapcsolat
 const MONGO_URI = 'mongodb+srv://fadmivan:BKD9wI5zlnPHw88Q@thsnd.y6dalxq.mongodb.net/thsnd?retryWrites=true&w=majority&appName=thsnd';
 
 mongoose.connect(MONGO_URI, {
@@ -32,7 +32,7 @@ mongoose.connect(MONGO_URI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// Felhasználó séma
+// 📦 Felhasználó séma
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, minlength: 4, maxlength: 20 },
   email: { type: String, required: true, unique: true },
@@ -82,15 +82,45 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 🔐 Login végpont (ha kell majd, később ide is beírjuk)
+// 🔐 Bejelentkezés végpont
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-// 🔁 Frontend fallback
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    res.status(200).json({
+      message: 'Login successful.',
+      user: {
+        username: user.username,
+        email: user.email,
+        customUrl: user.customUrl
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// 🔁 Frontend fallback nem-API GET kérésekhez
 app.get('/api/:id', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'register.html'));
 });
 
-
-// 🚀 Indítás
+// 🚀 Szerver indítása
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
