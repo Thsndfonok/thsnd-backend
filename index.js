@@ -5,6 +5,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,7 +14,7 @@ const PORT = process.env.PORT || 5000;
 // ✅ CORS beállítás
 app.use(cors({
   origin: 'https://trigger.bio',
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'PUT'],  // PUT hozzáadva
   credentials: false,
 }));
 
@@ -21,6 +22,9 @@ app.use(bodyParser.json());
 
 // 📁 Statikus fájlok kiszolgálása
 app.use(express.static(path.join(__dirname, 'public')));
+
+// --- Statikus mappa az uploads fájlokhoz ---
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 🔌 MongoDB kapcsolat
 const MONGO_URI = 'mongodb+srv://fadmivan:BKD9wI5zlnPHw88Q@thsnd.y6dalxq.mongodb.net/thsnd?retryWrites=true&w=majority&appName=thsnd';
@@ -40,9 +44,35 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   customUrl: { type: String, required: true, unique: true, minlength: 3 },
+
+  // Új mezők a profil testreszabáshoz
+  profileImage: { type: String, default: '' },
+  bio: { type: String, default: '' },
+  links: [{
+    label: String,
+    url: String,
+    icon: String,
+  }],
+  bgVideoUrl: { type: String, default: '' },
+  specialText: { type: String, default: '' },
+  animation: { type: String, default: '' },
+  musicUrl: { type: String, default: '' },
 });
 
 const User = mongoose.model('User', userSchema);
+
+// --- Multer beállítás fájlfeltöltéshez ---
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+const upload = multer({ storage });
 
 // 📩 Regisztráció
 app.post('/api/register', async (req, res) => {
@@ -124,6 +154,13 @@ app.get('/api/user/:customUrl', async (req, res) => {
       username: user.username,
       customUrl: user.customUrl,
       email: user.email,
+      profileImage: user.profileImage,
+      bio: user.bio,
+      links: user.links,
+      bgVideoUrl: user.bgVideoUrl,
+      specialText: user.specialText,
+      animation: user.animation,
+      musicUrl: user.musicUrl
     });
   } catch (error) {
     console.error('User fetch error:', error);
@@ -131,7 +168,7 @@ app.get('/api/user/:customUrl', async (req, res) => {
   }
 });
 
-// ⚠️ Dinamikus route: trigger.bio/thsnd
+// --- Dinamikus route profil oldal megjelenítéséhez ---
 app.get('/:customUrl', async (req, res, next) => {
   if (
     req.path.startsWith('/api') ||
@@ -148,6 +185,58 @@ app.get('/:customUrl', async (req, res, next) => {
   } catch (error) {
     console.error('Custom URL page error:', error);
     res.status(500).send('Server error');
+  }
+});
+
+// --- Profilkép feltöltés endpoint ---
+app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.profileImage = imageUrl;
+    await user.save();
+
+    res.json({ url: imageUrl });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// --- Profiladatok frissítése (username, bio, links stb.) ---
+app.put('/api/user/:userId', async (req, res) => {
+  try {
+    const updateData = req.body;
+
+    delete updateData.passwordHash;
+    delete updateData.password;
+
+    const user = await User.findByIdAndUpdate(req.params.userId, updateData, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    res.json({
+      message: 'User updated successfully',
+      user: {
+        username: user.username,
+        email: user.email,
+        customUrl: user.customUrl,
+        profileImage: user.profileImage,
+        bio: user.bio,
+        links: user.links,
+        bgVideoUrl: user.bgVideoUrl,
+        specialText: user.specialText,
+        animation: user.animation,
+        musicUrl: user.musicUrl,
+      }
+    });
+  } catch (err) {
+    console.error('Update user error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
