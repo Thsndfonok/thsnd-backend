@@ -7,10 +7,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const JWT_SECRET = 'affafjiajőwq9öfnf9n01ifdoqőf011231303dm'; // Ezt élesben környezeti változóból tárold!
 
 // --- uploads mappa létrehozása, ha nem létezik (Render-hez kötelező) ---
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -79,6 +82,20 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// JWT autentikáció middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) return res.status(401).json({ error: 'Access token missing' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user; // userId lesz benne
+    next();
+  });
+}
+
 // Regisztráció
 app.post('/api/register', async (req, res) => {
   try {
@@ -115,7 +132,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Bejelentkezés
+// Bejelentkezés (JWT tokennel)
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -134,10 +151,14 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or password.' });
     }
 
+    // JWT token generálás
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1d' });
+
     res.status(200).json({
       message: 'Login successful.',
+      token,
       user: {
-        _id: user._id, // fontos, hogy ezt visszaküldjük a frontendnek
+        _id: user._id,
         username: user.username,
         email: user.email,
         customUrl: user.customUrl
@@ -149,7 +170,63 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Egyedi user lekérdezése
+// Profiladatok lekérdezése token alapján
+app.get('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    res.json({
+      username: user.username,
+      email: user.email,
+      customUrl: user.customUrl,
+      profileImage: user.profileImage,
+      bio: user.bio,
+      links: user.links,
+      bgVideoUrl: user.bgVideoUrl,
+      specialText: user.specialText,
+      animation: user.animation,
+      musicUrl: user.musicUrl,
+    });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Profiladatok mentése token alapján
+app.put('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const updateData = req.body;
+
+    delete updateData.passwordHash;
+    delete updateData.password;
+
+    const user = await User.findByIdAndUpdate(req.user.userId, updateData, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    res.json({
+      message: 'User updated successfully',
+      user: {
+        username: user.username,
+        email: user.email,
+        customUrl: user.customUrl,
+        profileImage: user.profileImage,
+        bio: user.bio,
+        links: user.links,
+        bgVideoUrl: user.bgVideoUrl,
+        specialText: user.specialText,
+        animation: user.animation,
+        musicUrl: user.musicUrl,
+      }
+    });
+  } catch (err) {
+    console.error('Update user error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Egyedi user lekérdezése customUrl alapján (publikus profil oldal)
 app.get('/api/user/:customUrl', async (req, res) => {
   try {
     const user = await User.findOne({ customUrl: req.params.customUrl });
@@ -194,14 +271,14 @@ app.get('/:customUrl', async (req, res, next) => {
   }
 });
 
-// Profilkép feltöltés endpoint
-app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), async (req, res) => {
+// Profilkép feltöltés endpoint (tokennel)
+app.post('/api/upload-profile-image', authenticateToken, upload.single('profileImage'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
 
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.profileImage = imageUrl;
@@ -214,14 +291,14 @@ app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), asy
   }
 });
 
-// Háttérvideó feltöltése
-app.post('/api/upload-bg-video/:userId', upload.single('bgVideo'), async (req, res) => {
+// Háttérvideó feltöltése (tokennel)
+app.post('/api/upload-bg-video', authenticateToken, upload.single('bgVideo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
     const videoUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
 
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.bgVideoUrl = videoUrl;
@@ -234,14 +311,14 @@ app.post('/api/upload-bg-video/:userId', upload.single('bgVideo'), async (req, r
   }
 });
 
-// Zene feltöltése
-app.post('/api/upload-music/:userId', upload.single('musicFile'), async (req, res) => {
+// Zene feltöltése (tokennel)
+app.post('/api/upload-music', authenticateToken, upload.single('musicFile'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
     const musicUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
 
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.musicUrl = musicUrl;
@@ -251,38 +328,6 @@ app.post('/api/upload-music/:userId', upload.single('musicFile'), async (req, re
   } catch (err) {
     console.error('Upload music error:', err);
     res.status(500).json({ error: 'Upload failed' });
-  }
-});
-
-// Profiladatok frissítése
-app.put('/api/user/:userId', async (req, res) => {
-  try {
-    const updateData = req.body;
-
-    delete updateData.passwordHash;
-    delete updateData.password;
-
-    const user = await User.findByIdAndUpdate(req.params.userId, updateData, { new: true });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    res.json({
-      message: 'User updated successfully',
-      user: {
-        username: user.username,
-        email: user.email,
-        customUrl: user.customUrl,
-        profileImage: user.profileImage,
-        bio: user.bio,
-        links: user.links,
-        bgVideoUrl: user.bgVideoUrl,
-        specialText: user.specialText,
-        animation: user.animation,
-        musicUrl: user.musicUrl,
-      }
-    });
-  } catch (err) {
-    console.error('Update user error:', err);
-    res.status(500).json({ error: 'Server error' });
   }
 });
 
