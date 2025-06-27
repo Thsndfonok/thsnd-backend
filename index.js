@@ -85,9 +85,10 @@ app.post('/api/register', async (req, res) => {
 // 🔐 Login végpont (ha kell majd, később ide is beírjuk)
 
 // 🔁 Frontend fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
+app.get('/api/:id', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'register.html'));
 });
+
 
 // 🚀 Indítás
 app.listen(PORT, () => {
