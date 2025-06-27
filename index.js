@@ -214,6 +214,46 @@ app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), asy
   }
 });
 
+// Háttérvideó feltöltése
+app.post('/api/upload-bg-video/:userId', upload.single('bgVideo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const videoUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.bgVideoUrl = videoUrl;
+    await user.save();
+
+    res.json({ url: videoUrl });
+  } catch (err) {
+    console.error('Upload bg video error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// Zene feltöltése
+app.post('/api/upload-music/:userId', upload.single('musicFile'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const musicUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.musicUrl = musicUrl;
+    await user.save();
+
+    res.json({ url: musicUrl });
+  } catch (err) {
+    console.error('Upload music error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
 // Profiladatok frissítése
 app.put('/api/user/:userId', async (req, res) => {
   try {
