@@ -137,6 +137,7 @@ app.post('/api/login', async (req, res) => {
     res.status(200).json({
       message: 'Login successful.',
       user: {
+        _id: user._id, // fontos, hogy ezt visszaküldjük a frontendnek
         username: user.username,
         email: user.email,
         customUrl: user.customUrl
