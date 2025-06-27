@@ -6,27 +6,33 @@ import bodyParser from 'body-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// --- uploads mappa létrehozása, ha nem létezik (Render-hez kötelező) ---
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('✅ uploads mappa létrehozva');
+}
+
 // ✅ CORS beállítás
 app.use(cors({
   origin: 'https://trigger.bio',
-  methods: ['GET', 'POST', 'PUT'],  // PUT hozzáadva
+  methods: ['GET', 'POST', 'PUT'],
   credentials: false,
 }));
 
 app.use(bodyParser.json());
 
-// 📁 Statikus fájlok kiszolgálása
+// Statikus fájlok kiszolgálása
 app.use(express.static(path.join(__dirname, 'public')));
-
-// --- Statikus mappa az uploads fájlokhoz ---
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 🔌 MongoDB kapcsolat
+// MongoDB kapcsolat
 const MONGO_URI = 'mongodb+srv://fadmivan:BKD9wI5zlnPHw88Q@thsnd.y6dalxq.mongodb.net/thsnd?retryWrites=true&w=majority&appName=thsnd';
 
 mongoose.connect(MONGO_URI, {
@@ -38,14 +44,13 @@ mongoose.connect(MONGO_URI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// 📦 Felhasználó séma
+// Felhasználó séma
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, minlength: 4, maxlength: 20 },
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   customUrl: { type: String, required: true, unique: true, minlength: 3 },
 
-  // Új mezők a profil testreszabáshoz
   profileImage: { type: String, default: '' },
   bio: { type: String, default: '' },
   links: [{
@@ -61,10 +66,10 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// --- Multer beállítás fájlfeltöltéshez ---
+// Multer beállítás
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'uploads'));
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -74,7 +79,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// 📩 Regisztráció
+// Regisztráció
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password, customUrl } = req.body;
@@ -110,7 +115,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 🔐 Bejelentkezés
+// Bejelentkezés
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -143,7 +148,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 🔍 API: Egyedi user lekérdezése
+// Egyedi user lekérdezése
 app.get('/api/user/:customUrl', async (req, res) => {
   try {
     const user = await User.findOne({ customUrl: req.params.customUrl });
@@ -168,11 +173,11 @@ app.get('/api/user/:customUrl', async (req, res) => {
   }
 });
 
-// --- Dinamikus route profil oldal megjelenítéséhez ---
+// Dinamikus route profil oldalhoz
 app.get('/:customUrl', async (req, res, next) => {
   if (
     req.path.startsWith('/api') ||
-    req.path.includes('.') || // .html, .css, .js stb.
+    req.path.includes('.') ||
     req.path === '/favicon.ico'
   ) return next();
 
@@ -188,7 +193,7 @@ app.get('/:customUrl', async (req, res, next) => {
   }
 });
 
-// --- Profilkép feltöltés endpoint ---
+// Profilkép feltöltés endpoint
 app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -208,7 +213,7 @@ app.post('/api/upload-profile-image/:userId', upload.single('profileImage'), asy
   }
 });
 
-// --- Profiladatok frissítése (username, bio, links stb.) ---
+// Profiladatok frissítése
 app.put('/api/user/:userId', async (req, res) => {
   try {
     const updateData = req.body;
@@ -240,7 +245,7 @@ app.put('/api/user/:userId', async (req, res) => {
   }
 });
 
-// 🚀 Indítás
+// Indítás
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
