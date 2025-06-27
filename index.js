@@ -4,11 +4,13 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ Kifejezetten engedélyezett CORS domain
+// ✅ CORS beállítás
 app.use(cors({
   origin: 'https://trigger.bio',
   methods: ['GET', 'POST'],
@@ -17,8 +19,8 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// Statikus fájlok kiszolgálása a 'public' mappából
-app.use(express.static(path.join(process.cwd(), 'public')));
+// 📁 Statikus fájlok kiszolgálása
+app.use(express.static(path.join(__dirname, 'public')));
 
 // 🔌 MongoDB kapcsolat
 const MONGO_URI = 'mongodb+srv://fadmivan:BKD9wI5zlnPHw88Q@thsnd.y6dalxq.mongodb.net/thsnd?retryWrites=true&w=majority&appName=thsnd';
@@ -42,7 +44,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// 📩 Regisztrációs végpont
+// 📩 Regisztráció
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password, customUrl } = req.body;
@@ -78,7 +80,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 🔐 Bejelentkezés végpont
+// 🔐 Bejelentkezés
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -111,7 +113,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 🔍 Egyedi user adat lekérdezés API (pl. /api/user/thsnd)
+// 🔍 API: Egyedi user lekérdezése
 app.get('/api/user/:customUrl', async (req, res) => {
   try {
     const user = await User.findOne({ customUrl: req.params.customUrl });
@@ -129,22 +131,27 @@ app.get('/api/user/:customUrl', async (req, res) => {
   }
 });
 
-// 📄 Dinamikus profiloldal (https://trigger.bio/[customUrl])
+// ⚠️ Dinamikus route: trigger.bio/thsnd
 app.get('/:customUrl', async (req, res, next) => {
-  if (req.path.startsWith('/api')) return next();
+  if (
+    req.path.startsWith('/api') ||
+    req.path.includes('.') || // .html, .css, .js stb.
+    req.path === '/favicon.ico'
+  ) return next();
+
   try {
     const user = await User.findOne({ customUrl: req.params.customUrl });
     if (!user) {
-      return res.status(404).sendFile(path.join(process.cwd(), 'public', '404.html'));
+      return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
     }
-    res.sendFile(path.join(process.cwd(), 'public', 'profile.html'));
+    res.sendFile(path.join(__dirname, 'public', 'profile.html'));
   } catch (error) {
     console.error('Custom URL page error:', error);
     res.status(500).send('Server error');
   }
 });
 
-// 🚀 Szerver indítása
+// 🚀 Indítás
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
