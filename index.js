@@ -26,7 +26,7 @@ if (!fs.existsSync(uploadsDir)) {
 app.use(cors({
   origin: 'https://trigger.bio',
   methods: ['GET', 'POST', 'PUT'],
-  credentials: false,
+  credentials: true,
 }));
 
 app.use(bodyParser.json());
